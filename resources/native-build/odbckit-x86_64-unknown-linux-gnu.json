@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "target": "x86_64-linux",
+  "sourceSha256": {
+    "libraries/odbckit/native/bridge.c": "e71bc598aaa3363a672ffcbde2ebb2be5107b4efa8857f27b1e1ec83eab16f66",
+    "libraries/odbckit/modules/ODBCKit.bui": "2ed81cd5823153cad4b4ffff35aded5da8b6dab46539b5617144c75014b8f8e5",
+    "tools/build_odbckit.py": "32f62ee223021b5d3df83e1942794ad441a6a4fa27796cb8c9d8cc2de777e6ae"
+  },
+  "binarySha256": "b1f6fbee83502a5096c2ba0869075b7fceada15f9f54136a9caa0bc33c372e51"
+}

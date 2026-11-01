@@ -1,0 +1,1 @@
+{"schema":1,"name":"odbckit","version":"0.1.0","description":"ODBC 3 Database backend with native bound parameters, bounded buffered results and structured SQLSTATE errors","libraries":[{"libName":"buoy_odbckit","system":false,"minVersion":"0.1.0"}]}

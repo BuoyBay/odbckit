@@ -1,0 +1,18 @@
+Import odbckit
+
+' Run with the absolute path to your installed SQLite ODBC driver.
+Sub Main(args As Array Of String)
+    If Array.Count(args) <> 2 Then Throw New InvalidArgumentException("Supply a SQLite ODBC driver path")
+    If String.InStr(args(1), ";") > 0 Or String.InStr(args(1), "=") > 0 Or String.InStr(args(1), "{") > 0 Or String.InStr(args(1), "}") > 0 Then Throw New InvalidArgumentException("Driver path contains ODBC separators")
+    Dim db As New OdbcDatabase()
+    db.Connect("Driver=" + args(1) + ";Database=:memory:;BigInt=1;")
+    db.Execute("CREATE TABLE notes (body VARCHAR(200))")
+    db.Execute("INSERT INTO notes(body) VALUES(?)", [DbValue.OfString("Hello, 漢字🙂")])
+    Dim rows As OdbcRowSet = db.QueryOdbc("SELECT body FROM notes")
+    While rows.HasMoreRows()
+        Print rows.Value("body").AsString()
+        rows.NextRow()
+    End While
+    rows.Close()
+    db.Disconnect()
+End Sub

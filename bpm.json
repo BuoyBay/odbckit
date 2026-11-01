@@ -1,0 +1,21 @@
+{
+    "schema": 1,
+    "buoy": "0.72.0",
+    "dependencies": {},
+    "files": [
+        "manifest.json",
+        "modules",
+        "native",
+        "runtime",
+        "README.md",
+        "PROVENANCE.md",
+        "resources/buoy-docs",
+        "resources/native-build",
+        "resources",
+        "LICENSE",
+        "LICENSE-MIT.txt",
+        "LICENSE-APACHE.txt",
+        "LICENSE-DOCS.txt",
+        "NOTICE.md"
+    ]
+}

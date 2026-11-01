@@ -1,0 +1,250 @@
+' ODBC backend. Native bridge binds every value outside SQL text.
+Declare Function OdbcNew Lib "buoy_odbckit" Alias "bok_new" () As Ptr
+Declare Sub OdbcFree Lib "buoy_odbckit" Alias "bok_free" (handle As Ptr)
+Declare Function OdbcConnect Lib "buoy_odbckit" Alias "bok_connect" (handle As Ptr, connection As String) As Int32
+Declare Sub OdbcDisconnect Lib "buoy_odbckit" Alias "bok_disconnect" (handle As Ptr)
+Declare Function OdbcConnected Lib "buoy_odbckit" Alias "bok_connected" (handle As Ptr) As Int32
+Declare Function OdbcError Lib "buoy_odbckit" Alias "bok_error" (handle As Ptr) As String
+Declare Function OdbcState Lib "buoy_odbckit" Alias "bok_state" (handle As Ptr) As String
+Declare Function OdbcCode Lib "buoy_odbckit" Alias "bok_code" (handle As Ptr) As Int32
+Declare Function OdbcPrepare Lib "buoy_odbckit" Alias "bok_prepare" (handle As Ptr, sql As String, count As Int32) As Ptr
+Declare Function OdbcBind Lib "buoy_odbckit" Alias "bok_bind" (handle As Ptr, index As Int32, kind As Int32, intValue As Int64, number As Double, text As String) As Int32
+Declare Function OdbcExecute Lib "buoy_odbckit" Alias "bok_execute" (handle As Ptr) As Int32
+Declare Sub OdbcResultFree Lib "buoy_odbckit" Alias "bok_result_free" (handle As Ptr)
+Declare Function OdbcRows Lib "buoy_odbckit" Alias "bok_rows" (handle As Ptr) As Int64
+Declare Function OdbcColumns Lib "buoy_odbckit" Alias "bok_columns" (handle As Ptr) As Int32
+Declare Function OdbcName Lib "buoy_odbckit" Alias "bok_name" (handle As Ptr, col As Int32) As String
+Declare Function OdbcAffected Lib "buoy_odbckit" Alias "bok_affected" (handle As Ptr) As Int64
+Declare Function OdbcKind Lib "buoy_odbckit" Alias "bok_kind" (handle As Ptr, row As Int64, col As Int32) As Int32
+Declare Function OdbcInteger Lib "buoy_odbckit" Alias "bok_integer" (handle As Ptr, row As Int64, col As Int32) As Int64
+Declare Function OdbcNumber Lib "buoy_odbckit" Alias "bok_number" (handle As Ptr, row As Int64, col As Int32) As Double
+Declare Function OdbcText Lib "buoy_odbckit" Alias "bok_text" (handle As Ptr, row As Int64, col As Int32) As String
+Declare Function OdbcTransaction Lib "buoy_odbckit" Alias "bok_transaction" (handle As Ptr, operation As Int32) As Int32
+
+Public Class OdbcException Inherits DatabaseException
+    Public Property SqlState As String
+    Public Sub Constructor(message As String, state As String, nativeCode As Integer)
+        Super.Constructor(message, nativeCode)
+        Me.SqlState = state
+    End Sub
+End Class
+
+Private Sub OdbcCheckText(inputText As String, limit As Integer)
+    If String.LenBytes(inputText) > limit Then Throw New InvalidArgumentException("ODBC input text limit exceeded")
+    Dim raw As Bytes = Bytes.FromString(inputText, Text.Encodings.UTF8)
+    For i As Integer = 0 To raw.Count - 1
+        If raw.Item(i) = 0 Then Throw New InvalidArgumentException("ODBC text cannot contain NUL")
+    Next
+End Sub
+
+Private Sub OdbcThrow(handle As Ptr)
+    Throw New OdbcException(OdbcError(handle), OdbcState(handle), OdbcCode(handle))
+End Sub
+
+''' Buffered result. Independent of its connection after Query returns.
+Public Class OdbcRowSet Inherits RowSet
+    Private Property mHandle As Ptr
+    Private Property mPosition As Integer = 0
+    Private Property mRowCount As Integer = 0
+    Private Property mColumnCount As Integer = 0
+    Private Property mAffected As Integer = 0
+
+    Public Sub Constructor(nativeHandle As Ptr)
+        If nativeHandle = Nil Then Throw New InvalidArgumentException("ODBC result handle is Nil")
+        Me.mHandle = nativeHandle
+        Me.mRowCount = OdbcRows(nativeHandle)
+        Me.mColumnCount = OdbcColumns(nativeHandle)
+        Me.mAffected = OdbcAffected(nativeHandle)
+    End Sub
+
+    Private Sub CheckColumn(index As Integer)
+        If Me.mHandle = Nil Then Throw New InvalidArgumentException("ODBC result is closed")
+        If index < 0 Or index >= Me.mColumnCount Then Throw New InvalidArgumentException("ODBC column index is outside result")
+    End Sub
+
+    Public Function RowCount() As Integer
+        Return Me.mRowCount
+    End Function
+
+    Public Function AffectedRows() As Integer
+        Return Me.mAffected
+    End Function
+
+    Public Overrides Function HasMoreRows() As Boolean
+        Return Me.mHandle <> Nil And Me.mPosition < Me.mRowCount
+    End Function
+
+    Public Overrides Sub NextRow()
+        If Me.mHandle = Nil Then Throw New InvalidArgumentException("ODBC result is closed")
+        If Me.mPosition < Me.mRowCount Then Me.mPosition += 1
+    End Sub
+
+    Public Overrides Function ColumnCount() As Integer
+        Return Me.mColumnCount
+    End Function
+
+    Public Overrides Function ColumnName(index As Integer) As String
+        Me.CheckColumn(index)
+        Return OdbcName(Me.mHandle, index)
+    End Function
+
+    Public Overrides Function Value(column As String) As DbValue
+        Dim found As Integer = -1
+        For i As Integer = 0 To Me.mColumnCount - 1
+            If String.Compare(Me.ColumnName(i), column, True) = 0 Then
+                If found <> -1 Then Throw New InvalidArgumentException("ODBC column name is ambiguous; use its index")
+                found = i
+            End If
+        Next
+        If found < 0 Then Throw New InvalidArgumentException("ODBC column name was not found")
+        Return Me.Value(found)
+    End Function
+
+    Public Overrides Function Value(index As Integer) As DbValue
+        Me.CheckColumn(index)
+        If Not Me.HasMoreRows() Then Throw New InvalidArgumentException("ODBC result has no current row")
+        Dim col As Int32 = index
+        Select Case OdbcKind(Me.mHandle, Me.mPosition, col)
+        Case 0
+            Return DbValue.OfNull()
+        Case 1
+            Return DbValue.OfInteger(OdbcInteger(Me.mHandle, Me.mPosition, col))
+        Case 2
+            Return DbValue.OfDouble(OdbcNumber(Me.mHandle, Me.mPosition, col))
+        Case 4
+            Return DbValue.OfBoolean(OdbcInteger(Me.mHandle, Me.mPosition, col) <> 0)
+        Case Else
+            Return DbValue.OfString(OdbcText(Me.mHandle, Me.mPosition, col))
+        End Select
+    End Function
+
+    Public Overrides Sub Close()
+        If Me.mHandle <> Nil Then OdbcResultFree(Me.mHandle)
+        Me.mHandle = Nil
+    End Sub
+
+    Public Sub Destructor()
+        Me.Close()
+    End Sub
+End Class
+
+''' Public ODBC 3 backend. The installed driver owns connection-string semantics.
+Public Class OdbcDatabase Inherits Database
+    Private Property mHandle As Ptr
+    Public Property IdentityQuery As String = ""
+
+    Public Sub Constructor()
+        Me.mHandle = OdbcNew()
+        If Me.mHandle = Nil Then Throw New DatabaseException("ODBC context allocation failed")
+    End Sub
+
+    Public Overrides Sub Connect(connectionString As String)
+        OdbcCheckText(connectionString, 32767)
+        If OdbcConnect(Me.mHandle, connectionString) = 0 Then OdbcThrow(Me.mHandle)
+    End Sub
+
+    Public Overrides Sub Disconnect()
+        OdbcDisconnect(Me.mHandle)
+    End Sub
+
+    Public Overrides Function IsConnected() As Boolean
+        Return OdbcConnected(Me.mHandle) <> 0
+    End Function
+
+    Public Function QueryOdbc(sql As String) As OdbcRowSet
+        Dim params() As DbValue
+        Return Me.QueryOdbc(sql, params)
+    End Function
+
+    Public Function QueryOdbc(sql As String, params As Array Of DbValue) As OdbcRowSet
+        OdbcCheckText(sql, 1048576)
+        If Array.Count(params) > 4096 Then Throw New InvalidArgumentException("ODBC parameter count exceeds 4096")
+        Dim handle As Ptr = OdbcPrepare(Me.mHandle, sql, Array.Count(params))
+        If handle = Nil Then OdbcThrow(Me.mHandle)
+        Try
+            For i As Integer = 0 To Array.Count(params) - 1
+                Dim item As DbValue = params(i)
+                Dim kind As Int32 = 0
+                Dim integerValue As Integer = 0
+                Dim numberValue As Double = 0.0
+                Dim textValue As String = ""
+                Select Case item.Kind
+                Case DbValue.KindNull
+                    kind = 0
+                Case DbValue.KindInteger
+                    kind = 1
+                    integerValue = item.AsInteger()
+                Case DbValue.KindDouble
+                    kind = 2
+                    numberValue = item.AsDouble()
+                Case DbValue.KindString
+                    kind = 3
+                    textValue = item.AsString()
+                    OdbcCheckText(textValue, 1048576)
+                Case DbValue.KindBoolean
+                    kind = 4
+                    If item.AsBoolean() Then integerValue = 1
+                Case Else
+                    Throw New InvalidArgumentException("ODBC unsupported DbValue kind")
+                End Select
+                If OdbcBind(handle, i, kind, integerValue, numberValue, textValue) = 0 Then OdbcThrow(Me.mHandle)
+            Next
+            If OdbcExecute(handle) = 0 Then OdbcThrow(Me.mHandle)
+            Dim rows As New OdbcRowSet(handle)
+            handle = Nil
+            Return rows
+        Finally
+            If handle <> Nil Then OdbcResultFree(handle)
+        End Try
+    End Function
+
+    Public Overrides Function Query(sql As String) As RowSet
+        Return Me.QueryOdbc(sql)
+    End Function
+
+    Public Overrides Function Query(sql As String, params As Array Of DbValue) As RowSet
+        Return Me.QueryOdbc(sql, params)
+    End Function
+
+    Public Function Execute(sql As String, params As Array Of DbValue) As Integer
+        Dim rows As OdbcRowSet = Me.QueryOdbc(sql, params)
+        Dim changed As Integer = rows.AffectedRows()
+        rows.Close()
+        Return changed
+    End Function
+
+    Public Function Execute(sql As String) As Integer
+        Dim params() As DbValue
+        Return Me.Execute(sql, params)
+    End Function
+
+    Public Overrides Function LastInsertId() As Integer
+        If Me.IdentityQuery = "" Then Throw New InvalidArgumentException("ODBC has no portable identity query; configure IdentityQuery explicitly")
+        Dim rows As OdbcRowSet = Me.QueryOdbc(Me.IdentityQuery)
+        Try
+            If rows.RowCount() <> 1 Or rows.ColumnCount() <> 1 Then Throw New DatabaseException("ODBC identity query must return one integer column")
+            Dim value As DbValue = rows.Value(0)
+            If value.Kind <> DbValue.KindInteger Then Throw New DatabaseException("ODBC identity query must return an integer")
+            Return value.AsInteger()
+        Finally
+            rows.Close()
+        End Try
+    End Function
+
+    Public Sub BeginOdbcTransaction()
+        If OdbcTransaction(Me.mHandle, 0) = 0 Then OdbcThrow(Me.mHandle)
+    End Sub
+
+    Public Sub CommitOdbcTransaction()
+        If OdbcTransaction(Me.mHandle, 1) = 0 Then OdbcThrow(Me.mHandle)
+    End Sub
+
+    Public Sub RollbackOdbcTransaction()
+        If OdbcTransaction(Me.mHandle, 2) = 0 Then OdbcThrow(Me.mHandle)
+    End Sub
+
+    Public Sub Destructor()
+        If Me.mHandle <> Nil Then OdbcFree(Me.mHandle)
+        Me.mHandle = Nil
+    End Sub
+End Class
