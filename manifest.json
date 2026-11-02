@@ -1,1 +1,1 @@
-{"schema":1,"name":"odbckit","version":"0.1.0","description":"Use ODBC databases with native bound parameters","libraries":[{"libName":"buoy_odbckit","system":false,"minVersion":"0.1.0"}]}
+{"schema":1,"name":"odbckit","version":"0.1.0","description":"ODBC Database / RowSet with bound parameters","libraries":[{"libName":"buoy_odbckit","system":false,"minVersion":"0.1.0"}]}

@@ -1,4 +1,4 @@
-# Use ODBC databases with native bound parameters
+# ODBC Database / RowSet with bound parameters
 
 `Import odbckit` provides an ODBC 3 backend for the `Database` and `RowSet` API.
 It prepares SQL and binds parameters with `SQLBindParameter`; parameter values
