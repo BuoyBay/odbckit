@@ -1,6 +1,6 @@
 # Use ODBC databases with native bound parameters
 
-`Import odbckit` provides an ODBC 3 backend for Buoy's `Database` and `RowSet`.
+`Import odbckit` provides an ODBC 3 backend for the `Database` and `RowSet` API.
 It prepares SQL and binds parameters with `SQLBindParameter`; parameter values
 never become SQL text. A small C bridge uses only the public ODBC API.
 
@@ -51,8 +51,6 @@ On your own machine, install Buoy and run:
 ```sh
 buoy ai init --both
 ```
-
-The generated agent files and editor settings stay local and are ignored by Git.
 
 ## Contributing
 

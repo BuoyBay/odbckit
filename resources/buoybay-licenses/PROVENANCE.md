@@ -17,7 +17,7 @@ The bridge follows the public ODBC 3 API, using platform-installed `sql.h` and
 - [SQLite ODBC driver](https://www.ch-werner.de/sqliteodbc/)
 
 Local validation uses Debian's unixODBC 2.3.12 and SQLite ODBC 0.99991 installed
-as system prerequisites. Their code is not included in this package. Runtime
+as system prerequisites. Runtime
 licensing and redistribution obligations for a selected system driver remain
 with the distributor of that driver.
 

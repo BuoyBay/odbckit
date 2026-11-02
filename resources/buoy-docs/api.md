@@ -133,9 +133,8 @@ python3 tools/build_odbckit.py
 Build receipts bind the native binary to the current bridge, Buoy binding module
 and builder source hashes. Sealing rejects a missing or stale receipt or changed
 binary, and verifies the module/binary/receipt again inside the finished archive.
-The receipt ships under `resources/native-build/`. Verification builds and seals
-in a private temporary directory; it does not rewrite the tracked native library
-or package. Use the explicit builder command above to refresh those artifacts.
+The receipt ships under `resources/native-build/`. Use the builder to refresh
+the bridge and its receipt together.
 
 `BUOY`, `BPM_PACKAGER`, `CC` and `ODBC_SQLITE_DRIVER` override the compiler,
 packager, native compiler and absolute SQLite ODBC driver library path. The
@@ -144,22 +143,12 @@ another platform produces that platform's archive rather than silently including
 stale native slices. macOS requires unixODBC development files and `pkg-config`;
 the Windows builder expects a GCC-compatible compiler and system `odbc32`.
 
-Verification checks the module, sealed consumer and example with the actual Buoy
-compiler on all six desktop targets, reads every JSON errors/warnings array,
-then builds/runs the sealed consumer and example on Linux x86_64. Runtime tests
-cover native parameter binding, int64 extrema, Unicode and injection-looking
-text, NULL/Boolean/Double, typed `@DatabaseRecord` queries, affected rows,
-commit/rollback, SQLSTATE errors, duplicate names, count mismatch, repeated close,
-reconnect and result independence. A C harness tests native ownership, limits,
-invalid UTF-8, the documented NUL driver boundary and credential redaction;
-`--sanitizers` runs it under AddressSanitizer and UndefinedBehaviorSanitizer with
-leak detection. No external database service or network connection is used.
-
 Native execution is verified with Buoy 0.72, unixODBC 2.3.12 and SQLite ODBC
 0.99991 on Linux x86_64. Other targets have compiler checks only. Their native
 bridge binaries and real driver behavior still need target-host validation.
 
-
 [Typed API](typed-api.md) · [Getting started](getting-started.md)
 
-Test suites and fixtures are maintainer-local and are not part of this public repository.
+Builder context: run shared `tools/` commands from the assembled
+[BuoyBay workspace](https://github.com/BuoyBay/workspace-tools). The scripts live
+in [devtools](https://github.com/BuoyBay/devtools), alongside the shared build inputs.
